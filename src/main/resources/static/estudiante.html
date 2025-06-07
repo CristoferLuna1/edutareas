@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Panel Estudiante - EduTareas</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+</head>
+<body class="p-4 bg-light">
+  <div class="container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <h2 class="text-primary">Bienvenido, Estudiante</h2>
+      <button class="btn btn-outline-danger" onclick="cerrarSesion()">Cerrar sesión</button>
+    </div>
+
+    <h4>Tareas Pendientes</h4>
+    <div id="contenedorTareas"></div>
+  </div>
+
+  <script>
+    const usuario = JSON.parse(localStorage.getItem("usuario"));
+    const estudianteId = usuario?.id;
+
+    if (!usuario || usuario.rol !== "ESTUDIANTE") {
+      window.location.href = "login.html";
+    }
+
+    // Obtener entregas del estudiante
+    const obtenerEntregas = async () => {
+      const res = await fetch(`/api/entregas/estudiante/${estudianteId}`);
+      return await res.json();
+    };
+
+    const cargarTareas = async () => {
+      const res = await fetch("/api/tareas");
+      const tareas = await res.json();
+      const entregas = await obtenerEntregas();
+
+      const entregadas = new Set(entregas.map(e => e.tarea.id));
+
+      const contenedor = document.getElementById("contenedorTareas");
+      contenedor.innerHTML = "";
+
+      tareas.forEach(tarea => {
+  const entrega = entregas.find(e => e.tarea.id === tarea.id);
+  const yaEntregada = !!entrega;
+
+  contenedor.innerHTML += `
+    <div class="card mb-3">
+      <div class="card-body">
+        <h5 class="card-title">${tarea.titulo}</h5>
+        <p class="card-text">${tarea.descripcion}</p>
+        <p><strong>Fecha límite:</strong> ${tarea.fechaLimite}</p>
+
+        ${
+          yaEntregada
+            ? `<div class="alert alert-${entrega.calificacion >= 0 ? 'info' : 'success'} mb-0">
+                Ya entregaste esta tarea
+                ${entrega.calificacion >= 0
+                  ? `<br><strong>Calificación:</strong>${entrega.calificacion}`
+                  : '<br><em>Esperando calificación</em>'}
+               </div>`
+            : `
+              <form onsubmit="entregarTarea(event, ${tarea.id})" enctype="multipart/form-data">
+                <div class="input-group mb-2">
+                  <input type="file" class="form-control" name="archivo" required />
+                  <button class="btn btn-success" type="submit">Entregar</button>
+                </div>
+              </form>`
+        }
+      </div>
+    </div>
+  `;
+});
+    };
+
+    const entregarTarea = async (e, tareaId) => {
+      e.preventDefault();
+      const form = e.target;
+      const archivoInput = form.querySelector('input[type="file"]');
+      const archivo = archivoInput.files[0];
+
+      if (!archivo) return alert("Debes seleccionar un archivo");
+
+      const entrega = {
+        tarea: { id: tareaId },
+        estudiante: { id: estudianteId },
+        archivo: archivo.name,
+        fechaEntrega: new Date().toISOString().split("T")[0]
+      };
+
+      await fetch("/api/entregas", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(entrega)
+      });
+
+      alert("¡Tarea entregada correctamente!");
+      cargarTareas(); // vuelve a cargar tareas y actualiza la vista
+    };
+
+    const cerrarSesion = () => {
+      localStorage.removeItem("usuario");
+      window.location.href = "login.html";
+    };
+
+    cargarTareas();
+  </script>
+</body>
+</html>
